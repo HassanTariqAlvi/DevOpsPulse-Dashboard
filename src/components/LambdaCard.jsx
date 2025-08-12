@@ -2,31 +2,20 @@ import React, { useState } from "react";
 import run from "../assets/icons/run.svg";
 import plusIcon from "../assets/icons/plus.svg";
 import editIcon from "../assets/icons/edit.svg";
+import copyIcon from "../assets/icons/link-open.svg"; // temporarily reuse editIcon, replace with copy icon later
 import { LAMBDA_API } from "../utils/api";
 
-const LambdaCard = ({ title = "Deploy Lambda", color = "green", centerIcon }) => {
+const LambdaCard = ({ title, color, centerIcon }) => {
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
-  const [lambdaCode, setLambdaCode] = useState(
-    'exports.handler = async (event) => {\n  return { statusCode: 200, body: "Hello from Lambda!" };\n};'
-  );
-  const [lambdaName, setLambdaName] = useState(""); // <-- new state
+  const [lambdaCode, setLambdaCode] = useState("");
+  const [lambdaName, setLambdaName] = useState("");
+  const [functionUrl, setFunctionUrl] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [loadingSave, setLoadingSave] = useState(false);
-  const [loadingRun, setLoadingRun] = useState(false);
-
-  const isFormValid = () =>
-    accessKey.trim() !== "" &&
-    secretKey.trim() !== "" &&
-    lambdaCode.trim() !== "" &&
-    lambdaName.trim() !== "";
+  const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!isFormValid()) {
-      alert("Please fill all fields (including Lambda name) before saving.");
-      return;
-    }
-    setLoadingSave(true);
+    setSaving(true);
     try {
       const response = await fetch(LAMBDA_API.save, {
         method: "POST",
@@ -35,26 +24,25 @@ const LambdaCard = ({ title = "Deploy Lambda", color = "green", centerIcon }) =>
           awsAccessKeyId: accessKey,
           awsSecretAccessKey: secretKey,
           lambdaCode,
-          lambdaName, // <-- send lambdaName
+          lambdaName,
         }),
       });
-
       const data = await response.json();
-      alert(data.message || "Lambda configuration saved successfully.");
-      setShowModal(false);
+
+      if (response.ok) {
+        setFunctionUrl(data.functionUrl || "");
+        setShowModal(false);
+      } else {
+        alert(data.error || "Error saving Lambda");
+      }
     } catch (err) {
       alert("Error saving Lambda: " + err.message);
     } finally {
-      setLoadingSave(false);
+      setSaving(false);
     }
   };
 
   const handleRun = async () => {
-    if (!accessKey || !secretKey || !lambdaName) {
-      alert("Please provide AWS credentials and Lambda name to run.");
-      return;
-    }
-    setLoadingRun(true);
     try {
       const response = await fetch(LAMBDA_API.trigger, {
         method: "POST",
@@ -62,22 +50,19 @@ const LambdaCard = ({ title = "Deploy Lambda", color = "green", centerIcon }) =>
         body: JSON.stringify({
           awsAccessKeyId: accessKey,
           awsSecretAccessKey: secretKey,
-          lambdaName, // <-- send lambdaName
+          lambdaName,
         }),
       });
-
       const data = await response.json();
-      alert(data.message || "Lambda triggered successfully.");
+      alert(data.message || "Triggered");
     } catch (err) {
       alert("Error triggering Lambda: " + err.message);
-    } finally {
-      setLoadingRun(false);
     }
   };
 
   return (
     <>
-      <div className={`metric-card ${color}`}>
+      <div className={`metric-card ${color}`} style={{ position: "relative" }}>
         <div className="metric-card-content">
           <h3 className="metric-card-title">{title}</h3>
 
@@ -90,26 +75,83 @@ const LambdaCard = ({ title = "Deploy Lambda", color = "green", centerIcon }) =>
           )}
         </div>
 
-        {/* Edit/Add button - bottom-left */}
-        <button
-          className="metric-card-add-icon-button"
-          onClick={() => setShowModal(true)}
-          aria-label="Configure Lambda"
-          title="Configure Lambda"
+        {/* Bottom-left buttons container */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: "10px",
+            left: "10px",
+            display: "flex",
+            gap: "8px",
+            alignItems: "center",
+            zIndex: 10,
+          }}
         >
-          <img src={lambdaCode ? editIcon : plusIcon} alt="Edit/Add" />
-        </button>
+          <button
+            className="metric-card-add-icon-button"
+            onClick={() => setShowModal(true)}
+            aria-label="Configure Lambda"
+            title="Configure Lambda"
+            style={{ padding: 0, background: "none", border: "none", cursor: "pointer" }}
+          >
+            <img
+              src={lambdaCode ? editIcon : plusIcon}
+              alt="Edit/Add"
+              style={{ display: "block", width: 24, height: 24 }}
+            />
+          </button>
+        </div>
 
-        {/* Run button - bottom-right */}
+        {/* Function URL button on top-right */}
+        {functionUrl && (
+          <button
+            
+            onClick={() => window.open(functionUrl, "_blank")}
+            title="Open Lambda Function URL"
+            aria-label="Open Lambda Function URL"
+            style={{
+              position: "absolute",
+              top: "10px",
+              right: "10px",
+              padding: 0,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              zIndex: 20,
+              filter: "invert(1)",
+            }}
+          >
+            <img
+              src={copyIcon}
+              alt="Open URL"
+              style={{ display: "block", width: 24, height: 24 }}
+            />
+          </button>
+        )}
+
+        {/* Run button bottom-right */}
         <button
           className="metric-card-run-icon-button"
           onClick={handleRun}
           aria-label="Run Lambda"
           title="Run Lambda"
-          disabled={loadingRun}
+          disabled={!lambdaName}
+          style={{
+            position: "absolute",
+            bottom: "10px",
+            right: "10px",
+            padding: 0,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+          }}
         >
-          <img src={run} alt="Run Icon" className="metric-card-run-icon" />
-          {loadingRun && <span className="loading-text">Running...</span>}
+          <img
+            src={run}
+            alt="Run Icon"
+            className="metric-card-run-icon"
+            style={{ display: "block", width: 24, height: 24 }}
+          />
         </button>
       </div>
 
@@ -121,46 +163,56 @@ const LambdaCard = ({ title = "Deploy Lambda", color = "green", centerIcon }) =>
 
             <input
               type="text"
-              placeholder="Lambda Function Name"
-              value={lambdaName}
-              onChange={(e) => setLambdaName(e.target.value)}
-              autoComplete="off"
-              required
-            />
-            <input
-              type="text"
               placeholder="AWS Access Key ID"
               value={accessKey}
               onChange={(e) => setAccessKey(e.target.value)}
-              autoComplete="off"
-              required
             />
             <input
               type="password"
               placeholder="AWS Secret Access Key"
               value={secretKey}
               onChange={(e) => setSecretKey(e.target.value)}
-              autoComplete="off"
-              required
-            />
-            <textarea
-              placeholder="Write your Lambda code here..."
-              rows={8}
-              value={lambdaCode}
-              onChange={(e) => setLambdaCode(e.target.value)}
-              required
             />
 
-            <div className="modal-actions">
+            <input
+              type="text"
+              placeholder="Lambda Function Name"
+              value={lambdaName}
+              onChange={(e) => setLambdaName(e.target.value)}
+              style={{ marginTop: "10px" }}
+            />
+
+            <textarea
+              placeholder="Write your Lambda code here..."
+              rows={6}
+              value={lambdaCode}
+              onChange={(e) => setLambdaCode(e.target.value)}
+              style={{ marginTop: "10px" }}
+            />
+
+            <div
+              className="modal-actions"
+              style={{
+                marginTop: "10px",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+              }}
+            >
+              <button onClick={() => setShowModal(false)}>Cancel</button>
               <button
-                onClick={() => setShowModal(false)}
-                disabled={loadingSave}
+                onClick={handleSave}
+                disabled={
+                  !lambdaName || !lambdaCode || !accessKey || !secretKey || saving
+                }
               >
-                Cancel
+                Save
               </button>
-              <button onClick={handleSave} disabled={loadingSave}>
-                {loadingSave ? "Saving..." : "Save"}
-              </button>
+              {saving && (
+                <span style={{ color: "#0b76ef", fontWeight: "bold" }}>
+                  Saving...
+                </span>
+              )}
             </div>
           </div>
         </div>
